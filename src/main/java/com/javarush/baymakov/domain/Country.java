@@ -52,7 +52,8 @@ public class Country {
     @Column(name = "head_of_state")
     private String headOfState;
 
-    @Column(name = "capital")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "capital")
     private City city;
 
     @OneToMany(fetch = FetchType.EAGER)
