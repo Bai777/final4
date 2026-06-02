@@ -6,6 +6,9 @@ import com.javarush.baymakov.dao.CountryDAO;
 import com.javarush.baymakov.domain.City;
 import com.javarush.baymakov.domain.Country;
 import com.javarush.baymakov.domain.CountryLanguage;
+import com.javarush.baymakov.redis.CityCountry;
+import com.javarush.baymakov.redis.RedisDataTransformer;
+import com.javarush.baymakov.redis.RedisService;
 import io.lettuce.core.RedisClient;
 import org.hibernate.SessionFactory;
 import org.hibernate.cfg.Configuration;
@@ -39,15 +42,20 @@ public class Main {
 
         RedisClient redisClient = RedisClient.create("redis://localhost:6379");
         ObjectMapper mapper = new ObjectMapper();
+        RedisService redisService = new RedisService(redisClient, mapper);
 
         CityDAO cityDAO = new CityDAO(sessionFactory);
         CountryDAO countryDAO = new CountryDAO(sessionFactory);
 
         Main main = new Main(sessionFactory, redisClient, mapper, cityDAO, countryDAO);
+        RedisDataTransformer transformer = new RedisDataTransformer();
 
         try {
             List<City> allCities = main.cityDAO.getAllCities();
             System.out.println("Загружено городов: " + allCities.size());
+            List<CityCountry> preparedData = transformer.transformData(allCities);
+            redisService.pushToRedis(preparedData);
+            redisService.testRedisData(List.of(1, 2, 3, 10, 100));
 
             List<Country> countries = main.countryDAO.getAll();
             System.out.println("Стран загружено: " + countries.size());
