@@ -37,7 +37,6 @@ public class RedisService {
                 String value = sync.get(String.valueOf(id));
                 try {
                     objectMapper.readValue(value, CityCountry.class);
-                    System.out.println("Успешно прочитан и десериализован объект с id=" + id);
                 } catch (JsonProcessingException e) {
                     System.err.println("Ошибка десериализации для id=" + id);
                     e.printStackTrace();

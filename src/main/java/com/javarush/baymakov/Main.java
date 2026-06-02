@@ -9,6 +9,7 @@ import com.javarush.baymakov.domain.CountryLanguage;
 import com.javarush.baymakov.redis.CityCountry;
 import com.javarush.baymakov.redis.RedisDataTransformer;
 import com.javarush.baymakov.redis.RedisService;
+import com.javarush.baymakov.service.DataValidationService;
 import io.lettuce.core.RedisClient;
 import org.hibernate.SessionFactory;
 import org.hibernate.cfg.Configuration;
@@ -20,15 +21,13 @@ import static java.util.Objects.nonNull;
 public class Main {
     private final SessionFactory sessionFactory;
     private final RedisClient redisClient;
-    private final ObjectMapper mapper;
     private final CityDAO cityDAO;
     private final CountryDAO countryDAO;
 
-    public Main(SessionFactory sessionFactory, RedisClient redisClient, ObjectMapper mapper,
+    public Main(SessionFactory sessionFactory, RedisClient redisClient,
                 CityDAO cityDAO, CountryDAO countryDAO) {
         this.sessionFactory = sessionFactory;
         this.redisClient = redisClient;
-        this.mapper = mapper;
         this.cityDAO = cityDAO;
         this.countryDAO = countryDAO;
     }
@@ -43,22 +42,33 @@ public class Main {
         RedisClient redisClient = RedisClient.create("redis://localhost:6379");
         ObjectMapper mapper = new ObjectMapper();
         RedisService redisService = new RedisService(redisClient, mapper);
+        RedisDataTransformer transformer = new RedisDataTransformer();
 
         CityDAO cityDAO = new CityDAO(sessionFactory);
         CountryDAO countryDAO = new CountryDAO(sessionFactory);
+        DataValidationService validationService = new DataValidationService(sessionFactory, cityDAO);
 
-        Main main = new Main(sessionFactory, redisClient, mapper, cityDAO, countryDAO);
-        RedisDataTransformer transformer = new RedisDataTransformer();
+        Main main = new Main(sessionFactory, redisClient, cityDAO, countryDAO);
 
         try {
             List<City> allCities = main.cityDAO.getAllCities();
             System.out.println("Загружено городов: " + allCities.size());
             List<CityCountry> preparedData = transformer.transformData(allCities);
             redisService.pushToRedis(preparedData);
-            redisService.testRedisData(List.of(1, 2, 3, 10, 100));
+            System.out.println("Данные сохранены в Redis");
+            List<Integer> ids = List.of(3, 2545, 123, 4, 189, 89, 3458, 1189, 10, 102);
 
-            List<Country> countries = main.countryDAO.getAll();
-            System.out.println("Стран загружено: " + countries.size());
+            long startRedis = System.currentTimeMillis();
+            redisService.testRedisData(ids);
+            long stopRedis = System.currentTimeMillis();
+
+            long startMysql = System.currentTimeMillis();
+            validationService.testMysqlData(ids);
+            long stopMysql = System.currentTimeMillis();
+
+            System.out.printf("Redis:\t%d ms\n", (stopRedis - startRedis));
+            System.out.printf("MySQL:\t%d ms\n", (stopMysql - startMysql));
+
         } finally {
             main.shutdown();
         }

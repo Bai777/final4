@@ -1,8 +1,11 @@
 package com.javarush.baymakov.redis;
 
-import com.javarush.baymakov.domain.*;
+import com.javarush.baymakov.domain.City;
+import com.javarush.baymakov.domain.Country;
+import com.javarush.baymakov.domain.CountryLanguage;
 
-import java.util.*;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RedisDataTransformer {
