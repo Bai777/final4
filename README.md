@@ -7,6 +7,7 @@
 
 bash
 docker-compose up --build
+
 Что произойдёт:
 
 MySQL инициализируется с пустой БД world.
@@ -27,6 +28,7 @@ docker-compose down -v
 📊 Пример вывода в консоль
 
 Загружено городов: 4079
+
 Данные сохранены в Redis
 Итерация  1: Redis =   25 ms, MySQL =   26 ms
 ...
@@ -48,22 +50,32 @@ docker-compose down -v
 При запуске через docker-compose.yml уже заданы значения по умолчанию. При необходимости их можно переопределить в секции environment сервиса app:
 
 Переменная	Значение по умолчанию	Описание
+
 DB_HOST	db	Хост MySQL (имя сервиса)
+
 DB_PORT	3306	Порт MySQL
+
 DB_NAME	world	Имя базы данных
+
 DB_USER	root	Пользователь MySQL
+
 DB_PASSWORD	admin	Пароль
+
 REDIS_HOST	redis	Хост Redis
+
 REDIS_PORT	6379	Порт Redis
 
 💻 Локальный запуск (без Docker)
-Если вы хотите запустить приложение локально, убедитесь, что у вас установлены JDK 21, MySQL 8 и Redis. Затем:
+Если вы хотите запустить приложение локально, убедитесь, что у вас установлены JDK 21, MySQL 8 и Redis. 
+
+Затем:
 
 bash
 # Создайте БД world и настройте пользователя root/admin (или измените параметры в коде)
 mvn clean package
+
 java -jar target/final-1.0-SNAPSHOT-jar-with-dependencies.jar
-Переменные окружения можно задать перед запуском или изменить значения по умолчанию в коде (метод getEnv).
+
 
 📦 Зависимости
 Основные библиотеки (все описаны в pom.xml):
