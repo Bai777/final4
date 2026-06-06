@@ -11,12 +11,17 @@ import com.javarush.baymakov.redis.RedisDataTransformer;
 import com.javarush.baymakov.redis.RedisService;
 import com.javarush.baymakov.service.DataValidationService;
 import io.lettuce.core.RedisClient;
+import liquibase.Liquibase;
+import liquibase.database.DatabaseFactory;
+import liquibase.database.jvm.JdbcConnection;
+import liquibase.resource.ClassLoaderResourceAccessor;
 import org.hibernate.SessionFactory;
 import org.hibernate.cfg.Configuration;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.util.ArrayList;
 import java.util.List;
-
-import static java.util.Objects.nonNull;
 
 public class Main {
     private final SessionFactory sessionFactory;
@@ -32,14 +37,44 @@ public class Main {
         this.countryDAO = countryDAO;
     }
 
-    public static void main(String[] args) {
-        SessionFactory sessionFactory = new Configuration()
+    public static void main(String[] args) throws Exception {
+        String dbHost = getEnv("DB_HOST", "localhost");
+        String dbPort = getEnv("DB_PORT", "3306");
+        String dbName = getEnv("DB_NAME", "world");
+        String dbUser = getEnv("DB_USER", "root");
+        String dbPass = getEnv("DB_PASSWORD", "admin");
+        String redisHost = getEnv("REDIS_HOST", "localhost");
+        String redisPort = getEnv("REDIS_PORT", "6379");
+
+        String cleanUrl = String.format("jdbc:mysql://%s:%s/%s?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true", dbHost, dbPort, dbName);
+        String jdbcUrl = String.format("jdbc:p6spy:mysql://%s:%s/%s?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true", dbHost, dbPort, dbName);
+        String redisUrl = String.format("redis://%s:%s", redisHost, redisPort);
+
+        try (Connection connection = DriverManager.getConnection(cleanUrl, dbUser, dbPass)) {
+            Liquibase liquibase = new Liquibase(
+                    "db/changelog/changelog.xml",
+                    new ClassLoaderResourceAccessor(),
+                    DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(connection))
+            );
+            liquibase.update("");
+            System.out.println("Liquibase миграции выполнены");
+        } catch (Exception e) {
+            System.err.println("Ошибка выполнения Liquibase: " + e.getMessage());
+            throw e;
+        }
+
+        Configuration cfg = new Configuration()
                 .addAnnotatedClass(City.class)
                 .addAnnotatedClass(Country.class)
-                .addAnnotatedClass(CountryLanguage.class)
-                .buildSessionFactory();
+                .addAnnotatedClass(CountryLanguage.class);
+        cfg.setProperty("hibernate.connection.url", jdbcUrl);
+        cfg.setProperty("hibernate.connection.username", dbUser);
+        cfg.setProperty("hibernate.connection.password", dbPass);
+        cfg.setProperty("hibernate.connection.driver_class", "com.p6spy.engine.spy.P6SpyDriver");
 
-        RedisClient redisClient = RedisClient.create("redis://localhost:6379");
+        SessionFactory sessionFactory = cfg.buildSessionFactory();
+
+        RedisClient redisClient = RedisClient.create(redisUrl);
         ObjectMapper mapper = new ObjectMapper();
         RedisService redisService = new RedisService(redisClient, mapper);
         RedisDataTransformer transformer = new RedisDataTransformer();
@@ -56,30 +91,47 @@ public class Main {
             List<CityCountry> preparedData = transformer.transformData(allCities);
             redisService.pushToRedis(preparedData);
             System.out.println("Данные сохранены в Redis");
+
             List<Integer> ids = List.of(3, 2545, 123, 4, 189, 89, 3458, 1189, 10, 102);
 
-            long startRedis = System.currentTimeMillis();
-            redisService.testRedisData(ids);
-            long stopRedis = System.currentTimeMillis();
+            List<Long> redisTimes = new ArrayList<>();
+            List<Long> mysqlTimes = new ArrayList<>();
 
-            long startMysql = System.currentTimeMillis();
-            validationService.testMysqlData(ids);
-            long stopMysql = System.currentTimeMillis();
+            for (int i = 1; i <= 10; i++) {
 
-            System.out.printf("Redis:\t%d ms\n", (stopRedis - startRedis));
-            System.out.printf("MySQL:\t%d ms\n", (stopMysql - startMysql));
+                long startRedis = System.nanoTime();
+                redisService.testRedisData(ids);
+                long redisDelta = System.nanoTime() - startRedis;
 
+                long startMysql = System.nanoTime();
+                validationService.testMysqlData(ids);
+                long mysqlDelta = System.nanoTime() - startMysql;
+
+                redisTimes.add(redisDelta / 1_000_000);
+                mysqlTimes.add(mysqlDelta / 1_000_000);
+
+                System.out.printf("Итерация %2d: Redis = %4d ms, MySQL = %4d ms%n",
+                        i, redisTimes.get(i - 1), mysqlTimes.get(i - 1));
+            }
+
+            System.out.println("\n========= Сводная таблица времени (в миллисекундах) =========");
+            System.out.printf("%-10s | %-10s | %-10s%n", "Итерация", "Redis", "MySQL");
+            System.out.println("-----------------------------------------");
+            for (int i = 0; i < redisTimes.size(); i++) {
+                System.out.printf("%-10d | %-10d | %-10d%n", i + 1, redisTimes.get(i), mysqlTimes.get(i));
+            }
         } finally {
             main.shutdown();
         }
     }
 
+    private static String getEnv(String key, String defaultValue) {
+        String val = System.getenv(key);
+        return (val != null && !val.isBlank()) ? val : defaultValue;
+    }
+
     public void shutdown() {
-        if (nonNull(sessionFactory)) {
-            sessionFactory.close();
-        }
-        if (nonNull(redisClient)) {
-            redisClient.shutdown();
-        }
+        if (sessionFactory != null) sessionFactory.close();
+        if (redisClient != null) redisClient.shutdown();
     }
 }

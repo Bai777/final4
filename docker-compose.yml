@@ -1,0 +1,48 @@
+services:
+  db:
+    image: mysql:8
+    container_name: mysql_world
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: world
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: redis_cache
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: java_app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: world
+      DB_USER: root
+      DB_PASSWORD: admin
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    restart: on-failure
+
+volumes:
+  mysql_data:
